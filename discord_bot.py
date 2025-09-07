@@ -20,14 +20,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.messages = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='/', intents=intents)
 
 # File paths
 MESSAGE_COUNTS_FILE = 'message_counts.json'
 BOT_LOGS_FILE = 'bot_logs.json'
 
-# Channel ID to exclude from message counting (from .env)
-EXCLUDED_CHANNEL_ID = int(os.getenv('EXCLUDED_CHANNEL_ID', 0))  # Default to 0 if not set
+# Channel ID to exclude from message counting (from .env, default to 0 if not set)
+EXCLUDED_CHANNEL_ID = int(os.getenv('EXCLUDED_CHANNEL_ID', 0))
 
 # Custom embed border color (hex code)
 EMBED_BORDER_COLOR = 0xFF0000  # Red border color
@@ -147,14 +147,33 @@ data = load_message_counts()
 message_counts = data.get("counts", {})
 last_reset = data.get("last_reset", int(time.time()))
 
+# Sync slash commands on startup for all guilds
 @bot.event
 async def on_ready():
     logger.info(f'Logged in as {bot.user} at {datetime.now(timezone.utc)}')
     save_bot_log("online", f"Bot logged in as {bot.user}")
     try:
-        await bot.change_presence(activity=discord.Game(name="Chat Leaderboard | !help"))
+        await bot.change_presence(activity=discord.Game(name="Chat Leaderboard | /help"))
+        # Check for GUILD_IDS environment variable for per-guild sync
+        guild_ids = os.getenv('GUILD_IDS')
+        if guild_ids:
+            guild_ids = [int(id.strip()) for id in guild_ids.split(',')]
+            for guild_id in guild_ids:
+                guild = discord.Object(id=guild_id)
+                await bot.tree.sync(guild=guild)
+                logger.info(f"Synced commands for guild {guild_id}")
+                print(f"Registered commands for guild {guild_id}: {bot.tree.get_commands(guild=guild)}")
+        else:
+            # Default to global sync for universal bot
+            await bot.tree.sync()
+            logger.info("Synced commands globally")
+            print(f"Registered commands globally: {bot.tree.get_commands()}")
+    except discord.HTTPException as e:
+        logger.error(f"Sync failed: {e}. Retrying with global sync.")
+        await bot.tree.sync()
+        logger.info("Synced commands globally as fallback")
     except Exception as e:
-        logger.error(f"Error setting presence: {e}")
+        logger.error(f"Error setting presence or syncing commands: {e}")
 
     last_reset_dt = datetime.fromtimestamp(last_reset, tz=timezone.utc)
     logger.info(f"Fetching messages since last reset: {last_reset_dt}")
@@ -222,13 +241,14 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-@bot.command()
-async def leaderboard(ctx):
+# Slash command: /leaderboard
+@bot.tree.command(name="leaderboard", description="Display the leaderboard for the Agent role")
+async def leaderboard(interaction: discord.Interaction):
     try:
-        guild = ctx.guild
+        guild = interaction.guild
         agent_role = discord.utils.find(lambda r: r.name.lower() == 'agent', guild.roles)
         if not agent_role:
-            await ctx.send("No 'Agent' role found in this server!")
+            await interaction.response.send_message("No 'Agent' role found in this server!", ephemeral=True)
             logger.warning(f"No 'Agent' role found in guild {guild.name}")
             return
 
@@ -243,7 +263,7 @@ async def leaderboard(ctx):
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
 
         if not leaderboard:
-            await ctx.send("No members with the Agent role found in this server!")
+            await interaction.response.send_message("No members with the Agent role found in this server!", ephemeral=True)
             logger.info(f"No members with Agent role in guild {guild.name}")
             return
 
@@ -275,13 +295,14 @@ async def leaderboard(ctx):
             embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
             return embed
 
-        message = await ctx.send(embed=generate_embed(current_page))
+        await interaction.response.send_message(embed=generate_embed(current_page))
         if total_pages > 1:
+            message = await interaction.original_response()
             await message.add_reaction("⬅️")
             await message.add_reaction("➡️")
 
             def check(reaction, user):
-                return user == ctx.author and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
+                return user == interaction.user and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
 
             while True:
                 try:
@@ -296,21 +317,17 @@ async def leaderboard(ctx):
                     await message.clear_reactions()
                     break
     except Exception as e:
-        logger.error(f"Error in leaderboard command: {e}")
-        await ctx.send("An error occurred while generating the leaderboard. Please try again.")
+        logger.error(f"Error in /leaderboard command: {e}")
+        await interaction.response.send_message("An error occurred while generating the leaderboard. Please try again.", ephemeral=True)
 
-@bot.command()
-async def rolecount(ctx, *, role_name=None):
+# Slash command: /rolecount
+@bot.tree.command(name="rolecount", description="Display the leaderboard for a specified role")
+async def rolecount(interaction: discord.Interaction, role_name: str):
     try:
-        if not role_name:
-            await ctx.send("Please provide a role name! Use quotes for roles with spaces, e.g., `!rolecount \"Trusted Member\"`")
-            logger.warning("No role name provided for rolecount command")
-            return
-
-        guild = ctx.guild
+        guild = interaction.guild
         target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
         if not target_role:
-            await ctx.send(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.")
+            await interaction.response.send_message(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.", ephemeral=True)
             logger.warning(f"Role '{role_name}' not found in guild {guild.name}")
             return
 
@@ -325,7 +342,7 @@ async def rolecount(ctx, *, role_name=None):
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
 
         if not leaderboard:
-            await ctx.send(f"No members with the '{role_name}' role found in this server!")
+            await interaction.response.send_message(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
             logger.info(f"No members with role '{role_name}' in guild {guild.name}")
             return
 
@@ -357,13 +374,14 @@ async def rolecount(ctx, *, role_name=None):
             embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
             return embed
 
-        message = await ctx.send(embed=generate_embed(current_page))
+        await interaction.response.send_message(embed=generate_embed(current_page))
         if total_pages > 1:
+            message = await interaction.original_response()
             await message.add_reaction("⬅️")
             await message.add_reaction("➡️")
 
             def check(reaction, user):
-                return user == ctx.author and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
+                return user == interaction.user and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
 
             while True:
                 try:
@@ -378,12 +396,17 @@ async def rolecount(ctx, *, role_name=None):
                     await message.clear_reactions()
                     break
     except Exception as e:
-        logger.error(f"Error in rolecount command: {e}")
-        await ctx.send("An error occurred while generating the role leaderboard. Please try again.")
+        logger.error(f"Error in /rolecount command: {e}")
+        await interaction.response.send_message("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def resetcounts(ctx):
+# Slash command: /resetcounts
+@bot.tree.command(name="resetcounts", description="Reset all message counts (admin only)")
+async def resetcounts(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
+        logger.warning(f"User {interaction.user.name} attempted /resetcounts without admin permissions")
+        return
+
     try:
         global message_counts, last_reset
         message_counts = {}
@@ -392,21 +415,70 @@ async def resetcounts(ctx):
             "counts": message_counts,
             "last_reset": last_reset
         })
-        save_bot_log("reset", f"Message counts reset by {ctx.author}")
-        await ctx.send("Message counts have been reset!")
+        save_bot_log("reset", f"Message counts reset by {interaction.user}")
+        await interaction.response.send_message("Message counts have been reset!")
         logger.info("Message counts reset")
     except Exception as e:
-        logger.error(f"Error in resetcounts command: {e}")
-        await ctx.send("An error occurred while resetting counts. Please try again.")
+        logger.error(f"Error in /resetcounts command: {e}")
+        await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
-@resetcounts.error
-async def resetcounts_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("You need administrator permissions to use this command!")
-        logger.warning(f"User {ctx.author.name} attempted resetcounts without admin permissions")
-    else:
-        logger.error(f"Error in resetcounts: {error}")
-        await ctx.send("An error occurred. Please try again.")
+# Slash command: /setexcludedchannel
+@bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
+async def setexcludedchannel(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
+        logger.warning(f"User {interaction.user.name} attempted /setexcludedchannel without admin permissions")
+        return
+
+    await interaction.response.send_message("Please provide the channel ID you want to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
+    
+    def check(m):
+        return m.author == interaction.user and m.channel == interaction.channel
+
+    try:
+        response = await bot.wait_for('message', check=check, timeout=60.0)
+        channel_id = response.content.strip()
+
+        if channel_id.lower() == 'cancel':
+            await interaction.followup.send("Action cancelled!", ephemeral=True)
+            return
+
+        try:
+            channel_id = int(channel_id)
+            # Update the EXCLUDED_CHANNEL_ID globally and in .env
+            global EXCLUDED_CHANNEL_ID
+            EXCLUDED_CHANNEL_ID = channel_id
+
+            # Update the .env file
+            with open('.env', 'r') as file:
+                lines = file.readlines()
+            with open('.env', 'w') as file:
+                for line in lines:
+                    if line.startswith('EXCLUDED_CHANNEL_ID='):
+                        file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
+                    else:
+                        file.write(line)
+
+            save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user}")
+            await interaction.followup.send(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.")
+            logger.info(f"Excluded channel updated to {channel_id} by {interaction.user}")
+        except ValueError:
+            await interaction.followup.send("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
+        except PermissionError:
+            await interaction.followup.send("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
+            logger.error(f"Permission denied updating .env for {interaction.user}")
+        except Exception as e:
+            await interaction.followup.send("Something went wrong! Please try again.", ephemeral=True)
+            logger.error(f"Error setting excluded channel: {e}")
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send("You took too long! Action cancelled.", ephemeral=True)
+        logger.warning(f"Timeout setting excluded channel for {interaction.user}")
+
+# Slash command: /ping (debug command)
+@bot.tree.command(name="ping", description="Check if the bot is responsive")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
 
 # Bot token from .env
 bot.run(os.getenv('BOT_TOKEN'))
