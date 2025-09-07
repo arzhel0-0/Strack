@@ -189,10 +189,9 @@ async def on_ready():
                 async for message in channel.history(after=last_reset_dt, limit=1000):
                     if message.author.bot:
                         continue
-                    if message.author.roles:
-                        user_id = str(message.author.id)
-                        message_counts[user_id] = message_counts.get(user_id, 0) + 1
-                        new_messages += 1
+                    user_id = str(message.author.id)
+                    message_counts[user_id] = message_counts.get(user_id, 0) + 1
+                    new_messages += 1
                 logger.info(f"Processed channel: {channel.name} (ID: {channel.id})")
             except discord.Forbidden:
                 logger.warning(f'No access to channel {channel.name} (ID: {channel.id}) in guild {guild.name}')
@@ -207,7 +206,7 @@ async def on_ready():
         try:
             channel = bot.get_channel(EXCLUDED_CHANNEL_ID)
             if channel:
-                await channel.send(f'Bot started. Counted {new_messages} new messages by users with roles since last reset ({last_reset_dt.strftime("%Y-%m-%d %H:%M UTC")}).')
+                await channel.send(f'Bot started. Counted {new_messages} new messages by all users since last reset ({last_reset_dt.strftime("%Y-%m-%d %H:%M UTC")}).')
             else:
                 logger.warning(f"Could not find channel with ID {EXCLUDED_CHANNEL_ID}")
         except Exception as e:
@@ -228,14 +227,13 @@ async def on_message(message):
         return
 
     try:
-        if message.author.roles:
-            user_id = str(message.author.id)
-            message_counts[user_id] = message_counts.get(user_id, 0) + 1
-            save_message_counts({
-                "counts": message_counts,
-                "last_reset": last_reset
-            })
-            logger.info(f"Counted message from {message.author.name} (ID: {user_id})")
+        user_id = str(message.author.id)
+        message_counts[user_id] = message_counts.get(user_id, 0) + 1
+        save_message_counts({
+            "counts": message_counts,
+            "last_reset": last_reset
+        })
+        logger.info(f"Counted message from {message.author.name} (ID: {user_id})")
     except Exception as e:
         logger.error(f"Error processing message from {message.author.name}: {e}")
 
@@ -247,29 +245,22 @@ async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
 
 # Slash command: /leaderboard (available to all)
-@bot.tree.command(name="leaderboard", description="Display the leaderboard for the Agent role")
+@bot.tree.command(name="leaderboard", description="Display the leaderboard for all users")
 async def leaderboard(interaction: discord.Interaction):
     try:
         guild = interaction.guild
-        agent_role = discord.utils.find(lambda r: r.name.lower() == 'agent', guild.roles)
-        if not agent_role:
-            await interaction.response.send_message("No 'Agent' role found in this server!", ephemeral=True)
-            logger.warning(f"No 'Agent' role found in guild {guild.name}")
-            return
-
         leaderboard = []
         for member in guild.members:
-            if agent_role in member.roles:
-                user_id = str(member.id)
-                count = message_counts.get(user_id, 0)
-                username = (member.name[:12] + "...") if len(member.name) > 15 else member.name
-                leaderboard.append((username, count))
+            user_id = str(member.id)
+            count = message_counts.get(user_id, 0)
+            username = (member.name[:12] + "...") if len(member.name) > 15 else member.name
+            leaderboard.append((username, count))
 
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
 
         if not leaderboard:
-            await interaction.response.send_message("No members with the Agent role found in this server!", ephemeral=True)
-            logger.info(f"No members with Agent role in guild {guild.name}")
+            await interaction.response.send_message("No messages counted yet in this server!", ephemeral=True)
+            logger.info(f"No messages counted in guild {guild.name}")
             return
 
         total_messages = sum(count for _, count in leaderboard)
@@ -290,7 +281,7 @@ async def leaderboard(interaction: discord.Interaction):
                 table += f"{rank:<8} | {username:<{max_name_length}} | {count:<8}\n"
 
             embed = discord.Embed(
-                title="🏆 Agent Message Leaderboard",
+                title=f"🏆 {guild.name} and the Leaderboard",
                 description=f"```css\n{table}```",
                 color=EMBED_BORDER_COLOR,
                 timestamp=datetime.utcnow()
@@ -491,4 +482,4 @@ async def setexcludedchannel(interaction: discord.Interaction):
         await interaction.followup.send("An unexpected error occurred. Please try again.", ephemeral=True)
 
 # Bot token from .env
-bot.run(os.getenv('BOT_TOKEN')) # setup in .env file
+bot.run(os.getenv('BOT_TOKEN'))
