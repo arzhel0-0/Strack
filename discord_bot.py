@@ -241,7 +241,12 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# Slash command: /leaderboard
+# Slash command: /ping (available to all)
+@bot.tree.command(name="ping", description="Check if the bot is responsive")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
+
+# Slash command: /leaderboard (available to all)
 @bot.tree.command(name="leaderboard", description="Display the leaderboard for the Agent role")
 async def leaderboard(interaction: discord.Interaction):
     try:
@@ -320,7 +325,7 @@ async def leaderboard(interaction: discord.Interaction):
         logger.error(f"Error in /leaderboard command: {e}")
         await interaction.response.send_message("An error occurred while generating the leaderboard. Please try again.", ephemeral=True)
 
-# Slash command: /rolecount
+# Slash command: /rolecount (available to all)
 @bot.tree.command(name="rolecount", description="Display the leaderboard for a specified role")
 async def rolecount(interaction: discord.Interaction, role_name: str):
     try:
@@ -399,12 +404,12 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
         logger.error(f"Error in /rolecount command: {e}")
         await interaction.response.send_message("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
 
-# Slash command: /resetcounts
+# Slash command: /resetcounts (admin only)
 @bot.tree.command(name="resetcounts", description="Reset all message counts (admin only)")
 async def resetcounts(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
-        logger.warning(f"User {interaction.user.name} attempted /resetcounts without admin permissions")
+        logger.warning(f"User {interaction.user.name} (ID: {interaction.user.id}) attempted /resetcounts without admin permissions in guild {interaction.guild.name}")
         return
 
     try:
@@ -415,32 +420,36 @@ async def resetcounts(interaction: discord.Interaction):
             "counts": message_counts,
             "last_reset": last_reset
         })
-        save_bot_log("reset", f"Message counts reset by {interaction.user}")
-        await interaction.response.send_message("Message counts have been reset!")
-        logger.info("Message counts reset")
+        save_bot_log("reset", f"Message counts reset by {interaction.user.name} (ID: {interaction.user.id})")
+        await interaction.response.send_message("Message counts have been reset!", ephemeral=True)
+        logger.info("Message counts reset by admin")
     except Exception as e:
         logger.error(f"Error in /resetcounts command: {e}")
         await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
-# Slash command: /setexcludedchannel
+# Slash command: /setexcludedchannel (admin only)
 @bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
 async def setexcludedchannel(interaction: discord.Interaction):
+    logger.info(f"/setexcludedchannel triggered by {interaction.user.name} (ID: {interaction.user.id}) in guild {interaction.guild.name} (ID: {interaction.guild.id})")
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
-        logger.warning(f"User {interaction.user.name} attempted /setexcludedchannel without admin permissions")
+        logger.warning(f"User {interaction.user.name} (ID: {interaction.user.id}) attempted /setexcludedchannel without admin permissions")
         return
 
-    await interaction.response.send_message("Please provide the channel ID you want to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
-    
-    def check(m):
-        return m.author == interaction.user and m.channel == interaction.channel
-
     try:
+        await interaction.response.send_message("Please provide the channel ID you want to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
+        logger.info("Sent initial response for /setexcludedchannel")
+        
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel
+
         response = await bot.wait_for('message', check=check, timeout=60.0)
         channel_id = response.content.strip()
+        logger.info(f"Received response: {channel_id}")
 
         if channel_id.lower() == 'cancel':
             await interaction.followup.send("Action cancelled!", ephemeral=True)
+            logger.info("Action cancelled by user")
             return
 
         try:
@@ -448,6 +457,7 @@ async def setexcludedchannel(interaction: discord.Interaction):
             # Update the EXCLUDED_CHANNEL_ID globally and in .env
             global EXCLUDED_CHANNEL_ID
             EXCLUDED_CHANNEL_ID = channel_id
+            logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
 
             # Update the .env file
             with open('.env', 'r') as file:
@@ -458,27 +468,27 @@ async def setexcludedchannel(interaction: discord.Interaction):
                         file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
                     else:
                         file.write(line)
+            logger.info("Updated .env file with new EXCLUDED_CHANNEL_ID")
 
-            save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user}")
-            await interaction.followup.send(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.")
-            logger.info(f"Excluded channel updated to {channel_id} by {interaction.user}")
+            save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user.name} (ID: {interaction.user.id})")
+            await interaction.followup.send(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.", ephemeral=True)
+            logger.info(f"Excluded channel updated to {channel_id} by {interaction.user.name}")
         except ValueError:
             await interaction.followup.send("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
+            logger.error("Invalid channel ID provided")
         except PermissionError:
             await interaction.followup.send("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
-            logger.error(f"Permission denied updating .env for {interaction.user}")
+            logger.error(f"Permission denied updating .env for {interaction.user.name}")
         except Exception as e:
             await interaction.followup.send("Something went wrong! Please try again.", ephemeral=True)
             logger.error(f"Error setting excluded channel: {e}")
 
     except asyncio.TimeoutError:
         await interaction.followup.send("You took too long! Action cancelled.", ephemeral=True)
-        logger.warning(f"Timeout setting excluded channel for {interaction.user}")
-
-# Slash command: /ping (debug command)
-@bot.tree.command(name="ping", description="Check if the bot is responsive")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
+        logger.warning(f"Timeout setting excluded channel for {interaction.user.name}")
+    except Exception as e:
+        logger.error(f"Unexpected error in /setexcludedchannel: {e}")
+        await interaction.followup.send("An unexpected error occurred. Please try again.", ephemeral=True)
 
 # Bot token from .env
-bot.run(os.getenv('BOT_TOKEN'))
+bot.run(os.getenv('BOT_TOKEN')) # setup in .env file
