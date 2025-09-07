@@ -253,7 +253,7 @@ async def leaderboard(interaction: discord.Interaction):
         for member in guild.members:
             user_id = str(member.id)
             count = message_counts.get(user_id, 0)
-            username = member.mention  # Use mention for blue ping color
+            username = member.display_name  # Use display name instead of mention
             username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
             leaderboard.append((username, count))
 
@@ -276,7 +276,7 @@ async def leaderboard(interaction: discord.Interaction):
             max_name_length = max(max_name_length, len("Username"))
             max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            # Plain text table with aligned ranks, no code block markers
+            # Plain text table with aligned ranks
             table_lines = [
                 f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
                 "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
@@ -339,7 +339,7 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             if target_role in member.roles:
                 user_id = str(member.id)
                 count = message_counts.get(user_id, 0)
-                username = member.mention  # Use mention for blue ping color
+                username = member.display_name  # Use display name instead of mention
                 username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
                 leaderboard.append((username, count))
 
@@ -362,7 +362,7 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             max_name_length = max(max_name_length, len("Username"))
             max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            # Plain text table with aligned ranks, no code block markers
+            # Plain text table with aligned ranks
             table_lines = [
                 f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
                 "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
@@ -433,7 +433,6 @@ async def resetcounts(interaction: discord.Interaction):
         await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
 # Slash command: /setexcludedchannel (admin only)
-
 @bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
 async def setexcludedchannel(interaction: discord.Interaction):
     logger.info(f"/setexcludedchannel triggered by {interaction.user.name} (ID: {interaction.user.id}) in guild {interaction.guild.name} (ID: {interaction.guild.id})")
