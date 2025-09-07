@@ -1,6 +1,3 @@
-Alright, let’s give the `README.md` for your **Strack** Discord bot a more human, friendly vibe! I’ve reworked it with a warm tone, casual language, and big, bold headings to keep it eye-catching and easy to follow. I’ve removed all specific date and time references as you asked, and I’ve tailored it to feel welcoming while still covering all the essentials—intro, setup steps, commands, and more. The current time (01:03 PM IST, September 7, 2025) is noted by the system, but I won’t hardcode it into the text to keep it timeless.
-
----
 
 # **Strack Discord Bot**
 
