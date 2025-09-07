@@ -18,7 +18,7 @@ load_dotenv()
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+intents.members = True  # Ensure members intent is enabled
 intents.messages = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
@@ -29,12 +29,9 @@ BOT_LOGS_FILE = 'bot_logs.json'
 # Channel ID to exclude from message counting (from .env, default to 0 if not set)
 EXCLUDED_CHANNEL_ID = int(os.getenv('EXCLUDED_CHANNEL_ID', 0))
 
-# Custom embed border color (hex code)
-EMBED_BORDER_COLOR = 0xFF0000  # Red border color
-
 # Load message counts and metadata from file
 def load_message_counts():
-    default_data = {"counts": {}, "last_reset": int(time.time())}
+    default_data = {"counts": {}, "timestamps": {}, "last_reset": int(time.time())}
     if not os.path.exists(MESSAGE_COUNTS_FILE):
         logger.info(f"{MESSAGE_COUNTS_FILE} does not exist, creating with default structure")
         save_message_counts(default_data)
@@ -50,6 +47,9 @@ def load_message_counts():
             if "counts" not in data or not isinstance(data["counts"], dict):
                 logger.warning(f"Missing or invalid 'counts' in {MESSAGE_COUNTS_FILE}, resetting")
                 data["counts"] = {}
+            if "timestamps" not in data or not isinstance(data["timestamps"], dict):
+                logger.warning(f"Missing or invalid 'timestamps' in {MESSAGE_COUNTS_FILE}, resetting")
+                data["timestamps"] = {}
             if "last_reset" not in data or not isinstance(data["last_reset"], int):
                 logger.warning(f"Missing or invalid 'last_reset' in {MESSAGE_COUNTS_FILE}, setting to current time")
                 data["last_reset"] = int(time.time())
@@ -70,9 +70,11 @@ def save_message_counts(data):
     try:
         if not isinstance(data, dict):
             logger.error(f"Invalid data type for saving to {MESSAGE_COUNTS_FILE}: {type(data)}")
-            data = {"counts": {}, "last_reset": int(time.time())}
+            data = {"counts": {}, "timestamps": {}, "last_reset": int(time.time())}
         if "counts" not in data:
             data["counts"] = {}
+        if "timestamps" not in data:
+            data["timestamps"] = {}
         if "last_reset" not in data:
             data["last_reset"] = int(time.time())
 
@@ -140,6 +142,7 @@ def save_bot_log(event, details):
 # Initialize message counts and metadata
 data = load_message_counts()
 message_counts = data.get("counts", {})
+message_timestamps = data.get("timestamps", {})
 last_reset = data.get("last_reset", int(time.time()))
 
 # Sync slash commands on startup for all guilds
@@ -179,13 +182,15 @@ async def on_ready():
                 logger.info(f"Skipping excluded channel: {channel.name} (ID: {channel.id})")
                 continue
             try:
-                async for message in channel.history(after=last_reset_dt, limit=1000):
+                async for message in channel.history(after=last_reset_dt):  # Fetch all messages after last reset
                     if message.author.bot:
                         continue
                     user_id = str(message.author.id)
                     message_counts[user_id] = message_counts.get(user_id, 0) + 1
+                    message_timestamps[user_id] = message_timestamps.get(user_id, [])
+                    message_timestamps[user_id].append(message.created_at.timestamp())
                     new_messages += 1
-                logger.info(f"Processed channel: {channel.name} (ID: {channel.id})")
+                logger.info(f"Processed channel: {channel.name} (ID: {channel.id}) with {new_messages} messages")
             except discord.Forbidden:
                 logger.warning(f'No access to channel {channel.name} (ID: {channel.id}) in guild {guild.name}')
             except discord.HTTPException as e:
@@ -199,13 +204,14 @@ async def on_ready():
         try:
             channel = bot.get_channel(EXCLUDED_CHANNEL_ID)
             if channel:
-                await channel.send(f'Bot started. Counted {new_messages} new messages by all users since last reset ({last_reset_dt.strftime("%Y-%m-%d %H:%M UTC")}).')
+                await channel.send(f'Bot started. Counted {new_messages} new messages since last reset ({last_reset_dt.strftime("%Y-%m-%d %H:%M UTC")}).')
             else:
                 logger.warning(f"Could not find channel with ID {EXCLUDED_CHANNEL_ID}")
         except Exception as e:
             logger.error(f"Error sending notification to channel {EXCLUDED_CHANNEL_ID}: {e}")
 
     data["counts"] = message_counts
+    data["timestamps"] = message_timestamps
     data["last_reset"] = last_reset
     save_message_counts(data)
 
@@ -222,8 +228,11 @@ async def on_message(message):
     try:
         user_id = str(message.author.id)
         message_counts[user_id] = message_counts.get(user_id, 0) + 1
+        message_timestamps[user_id] = message_timestamps.get(user_id, [])
+        message_timestamps[user_id].append(message.created_at.timestamp())
         save_message_counts({
             "counts": message_counts,
+            "timestamps": message_timestamps,
             "last_reset": last_reset
         })
         logger.info(f"Counted message from {message.author.name} (ID: {user_id})")
@@ -232,70 +241,107 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# Slash command: /ping (available to all)
+# Slash command: /ping
 @bot.tree.command(name="ping", description="Check if the bot is responsive")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
 
-# Slash command: /leaderboard (available to all)
-@bot.tree.command(name="leaderboard", description="Display the leaderboard for all users")
-async def leaderboard(interaction: discord.Interaction):
+# Slash command: /leaderboard
+@bot.tree.command(name="leaderboard", description="Display the leaderboard for a specific timeframe")
+@discord.app_commands.describe(timeframe="Timeframe to filter the leaderboard (1h, 24h, 7d, 14d, all); defaults to 'all'")
+async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
+    await interaction.response.defer()  # Defer to avoid timeout
     try:
+        start_time = time.time()
         guild = interaction.guild
-        leaderboard = []
-        for member in guild.members:
-            user_id = str(member.id)
-            count = message_counts.get(user_id, 0)
-            username = member.display_name
-            username = username if len(username) <= 15 else username[:15] + "..."
-            leaderboard.append((username, count))
+        if not guild:
+            raise ValueError("Guild not available in interaction")
 
-        leaderboard.sort(key=lambda x: (-x[1], x[0]))
+        # Check if the bot can access members
+        try:
+            _ = guild.members  # Test member access
+        except AttributeError:
+            await interaction.followup.send("The bot lacks permission to view members. Please enable the 'Server Members Intent' in the Discord Developer Portal.", ephemeral=True)
+            logger.error(f"Member access denied for guild {guild.name if guild else 'None'}")
+            return
+
+        logger.debug(f"Starting leaderboard generation for {timeframe} at {datetime.now(timezone.utc)}")
+        current_time = time.time()
+        timeframe_options = {
+            "1h": 3600,    # 1 hour in seconds
+            "24h": 86400,  # 24 hours in seconds
+            "7d": 604800,  # 7 days in seconds
+            "14d": 1209600, # 14 days in seconds
+            "all": 0       # No time limit, uses data since last reset
+        }
+
+        if timeframe not in timeframe_options:
+            await interaction.followup.send("Invalid timeframe! Use 1h, 24h, 7d, 14d, or all.", ephemeral=True)
+            return
+
+        leaderboard = []
+        member_count = 0
+        member_loop_start = time.time()
+        for member in guild.members:  # Process all members
+            member_count += 1
+            user_id = str(member.id)
+            if timeframe == "all":
+                count = message_counts.get(user_id, 0)  # Use data since last reset, default to 0 if no messages
+            else:
+                time_threshold = current_time - timeframe_options[timeframe]
+                count = sum(1 for t in message_timestamps.get(user_id, []) if t >= time_threshold) or 0
+            username = member.display_name[:15] if len(member.display_name) > 15 else member.display_name
+            leaderboard.append((username, count))  # Include all members, even with 0 messages
+        logger.debug(f"Member loop for {timeframe} took {time.time() - member_loop_start:.2f}s, processed {member_count} members, got {len(leaderboard)} entries")
 
         if not leaderboard:
-            await interaction.response.send_message("No messages counted yet in this server!", ephemeral=True)
-            logger.info(f"No messages counted in guild {guild.name}")
+            await interaction.followup.send(f"No members found in the server!" if timeframe != "all" else "No members found since last reset!", ephemeral=True)
+            logger.info(f"No members found in guild {guild.name} for timeframe {timeframe}")
             return
+
+        sort_start = time.time()
+        leaderboard.sort(key=lambda x: (-x[1], x[0]))  # Sort by count (descending), then name
+        logger.debug(f"Sorting took {time.time() - sort_start:.2f}s")
 
         total_messages = sum(count for _, count in leaderboard)
         users_per_page = 10
         pages = [leaderboard[i:i + users_per_page] for i in range(0, len(leaderboard), users_per_page)]
         total_pages = len(pages)
         current_page = 0
+        current_timeframe = timeframe  # Track current timeframe
 
-        def generate_embed(page_num):
+        def generate_embed(page_num, tf):
             page = pages[page_num]
-            max_name_length = max(len(name) for name, _ in page) if page else len("Username")
-            max_name_length = max(max_name_length, len("Username"))
-            max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
-
-            # Add gap between Username and Messages with extra padding
-            table_lines = [
-                f"Rank    | Username{' ' * (max_name_length - 8 + 4)} | Messages",  # +4 for gap
-                "=" * 8 + "=+" + "=" * (max_name_length + 4) + "=+" + "=" * 8
-            ]
-            for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
-                rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
-                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}}    | {count:<8}")  # Added 4 spaces for gap
-
-            table = "\n".join(table_lines)
-
+            max_name_length = max(len(name) for name, _ in page) if page else 15
+            table = "\n".join(f"{i + page_num * users_per_page + 1}. {name:<{max_name_length}} - {count}" for i, (name, count) in enumerate(page))
             embed = discord.Embed(
-                title=f"🏆 {guild.name} and the Leaderboard",
-                description=table,
-                color=EMBED_BORDER_COLOR,
+                title=f"🏆 {guild.name} Leaderboard ({tf if tf != 'all' else 'All Time'})",
+                description=f"```{table}```",
+                color=0x00ff00,  # Green border
                 timestamp=datetime.utcnow()
             )
-            thumbnail_url = guild.icon.url if guild.icon else (bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
-            embed.set_thumbnail(url=thumbnail_url)
-            embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
+            embed.set_thumbnail(url=guild.icon.url if guild.icon else bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
+            server_info = f"Members: {guild.member_count} | Created: {guild.created_at.strftime('%Y-%m-%d')}"
+            embed.set_footer(text=f"{server_info} | Page {page_num + 1}/{total_pages} | Total Messages: {total_messages}")
             return embed
 
-        await interaction.response.send_message(embed=generate_embed(current_page))
+        embed_start = time.time()
+        await interaction.followup.send(embed=generate_embed(current_page, current_timeframe))
+        logger.debug(f"Embed generation and send took {time.time() - embed_start:.2f}s")
         if total_pages > 1:
             message = await interaction.original_response()
-            await message.add_reaction("⬅️")
-            await message.add_reaction("➡️")
+            try:
+                await message.add_reaction("⬅️")
+                await message.add_reaction("➡️")
+                logger.debug(f"Added reactions ⬅️ and ➡️ to message {message.id}")
+            except discord.Forbidden:
+                logger.error(f"Bot lacks 'Add Reactions' permission in channel {interaction.channel.name} (ID: {interaction.channel.id})")
+                await interaction.followup.send("The bot lacks permission to add reactions. Please grant 'Add Reactions' permission.", ephemeral=True)
+                return
+            except discord.HTTPException as e:
+                logger.error(f"Failed to add reactions to message {message.id}: {e}")
+                await interaction.followup.send("An error occurred while adding reaction buttons. Please try again.", ephemeral=True)
+                return
 
             def check(reaction, user):
                 return user == interaction.user and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
@@ -307,42 +353,63 @@ async def leaderboard(interaction: discord.Interaction):
                         current_page += 1
                     elif str(reaction.emoji) == "⬅️" and current_page > 0:
                         current_page -= 1
-                    await message.edit(embed=generate_embed(current_page))
+                    await message.edit(embed=generate_embed(current_page, current_timeframe))
                     await message.remove_reaction(reaction, user)
                 except asyncio.TimeoutError:
                     await message.clear_reactions()
+                    logger.debug(f"Pagination timeout for message {message.id}")
                     break
-    except Exception as e:
-        logger.error(f"Error in /leaderboard command: {e}")
-        await interaction.response.send_message("An error occurred while generating the leaderboard. Please try again.", ephemeral=True)
+                except discord.Forbidden:
+                    logger.error(f"Bot lacks permission to edit/remove reactions on message {message.id}")
+                    await interaction.followup.send("The bot lacks permission to manage reactions. Please grant 'Manage Messages' permission.", ephemeral=True)
+                    break
+                except Exception as e:
+                    logger.error(f"Error in pagination for message {message.id}: {e}")
+                    await interaction.followup.send("An error occurred during pagination. Please try again.", ephemeral=True)
+                    break
 
-# Slash command: /rolecount (available to all) with inline input
+        logger.debug(f"Total leaderboard generation took {time.time() - start_time:.2f}s")
+    except discord.errors.Forbidden as e:
+        logger.error(f"Forbidden error in /leaderboard: {str(e)}. Guild: {guild.name if guild else 'None'}, Timeframe: {timeframe}, Channel: {interaction.channel.name if interaction.channel else 'None'}")
+        await interaction.followup.send("The bot lacks necessary permissions. Please ensure the bot has 'View Members' and 'Send Messages' permissions in the server and channel, and the 'Server Members Intent' is enabled in the Discord Developer Portal.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Error in /leaderboard command: {str(e)}. Guild: {guild.name if guild else 'None'}, Timeframe: {timeframe}")
+        await interaction.followup.send("An error occurred while generating the leaderboard. Please try again. Check logs.", ephemeral=True)
+
+# Slash command: /rolecount
 @bot.tree.command(name="rolecount", description="Display the leaderboard for a specified role")
 @discord.app_commands.describe(role_name="The name of the role to filter the leaderboard (e.g., 'Admin')")
 async def rolecount(interaction: discord.Interaction, role_name: str):
+    await interaction.response.defer()
     try:
         guild = interaction.guild
+        if not guild:
+            await interaction.followup.send("Guild not available in interaction.", ephemeral=True)
+            return
+
+        # Fetch all members to ensure the cache is populated
+        await guild.members.fetch()
+
+        # Find the role (case-insensitive)
         target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
         if not target_role:
-            await interaction.response.send_message(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.", ephemeral=True)
-            logger.warning(f"Role '{role_name}' not found in guild {guild.name}")
+            await interaction.followup.send(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.", ephemeral=True)
             return
 
+        # Get members with the role
         leaderboard = []
-        for member in guild.members:
+        for member in guild.members:  # Process all members
             if target_role in member.roles:
                 user_id = str(member.id)
-                count = message_counts.get(user_id, 0)
-                username = member.display_name
-                username = username if len(username) <= 15 else username[:15] + "..."
-                leaderboard.append((username, count))
-
-        leaderboard.sort(key=lambda x: (-x[1], x[0]))
+                count = message_counts.get(user_id, 0)  # Default to 0 if no messages
+                username = member.display_name[:15] if len(member.display_name) > 15 else member.display_name
+                leaderboard.append((username, count))  # Include all members with the role, even with 0 messages
 
         if not leaderboard:
-            await interaction.response.send_message(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
-            logger.info(f"No members with role '{role_name}' in guild {guild.name}")
+            await interaction.followup.send(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
             return
+
+        leaderboard.sort(key=lambda x: (-x[1], x[0]))
 
         total_messages = sum(count for _, count in leaderboard)
         users_per_page = 10
@@ -352,33 +419,19 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
 
         def generate_embed(page_num):
             page = pages[page_num]
-            max_name_length = max(len(name) for name, _ in page) if page else len("Username")
-            max_name_length = max(max_name_length, len("Username"))
-            max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
-
-            # Add gap between Username and Messages with extra padding
-            table_lines = [
-                f"Rank    | Username{' ' * (max_name_length - 8 + 4)} | Messages",  # +4 for gap
-                "=" * 8 + "=+" + "=" * (max_name_length + 4) + "=+" + "=" * 8
-            ]
-            for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
-                rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
-                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}}    | {count:<8}")  # Added 4 spaces for gap
-
-            table = "\n".join(table_lines)
-
+            max_name_length = max(len(name) for name, _ in page) if page else 15
+            table = "\n".join(f"{i + page_num * users_per_page + 1}. {name:<{max_name_length}} - {count}" for i, (name, count) in enumerate(page))
             embed = discord.Embed(
                 title=f"🏆 {target_role.name} Message Leaderboard",
-                description=table,
-                color=EMBED_BORDER_COLOR,
+                description=f"```{table}```",
+                color=0x00ff00,
                 timestamp=datetime.utcnow()
             )
-            thumbnail_url = guild.icon.url if guild.icon else (bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
-            embed.set_thumbnail(url=thumbnail_url)
-            embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
+            embed.set_thumbnail(url=guild.icon.url if guild.icon else bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
+            embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages}")
             return embed
 
-        await interaction.response.send_message(embed=generate_embed(current_page))
+        await interaction.followup.send(embed=generate_embed(current_page))
         if total_pages > 1:
             message = await interaction.original_response()
             await message.add_reaction("⬅️")
@@ -399,79 +452,91 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
                 except asyncio.TimeoutError:
                     await message.clear_reactions()
                     break
+                except discord.Forbidden:
+                    await interaction.followup.send("The bot lacks permission to manage reactions. Please grant 'Manage Messages' permission.", ephemeral=True)
+                    break
+                except Exception as e:
+                    await interaction.followup.send("An error occurred during pagination. Please try again.", ephemeral=True)
+                    break
+    except discord.errors.Forbidden as e:
+        await interaction.followup.send("The bot lacks necessary permissions. Ensure it has 'View Members' and 'Send Messages' permissions.", ephemeral=True)
     except Exception as e:
-        logger.error(f"Error in /rolecount command: {e}")
-        await interaction.response.send_message("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
+        await interaction.followup.send("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
 
-# Slash command: /resetcounts (admin only)
+# Slash command: /resetcounts
 @bot.tree.command(name="resetcounts", description="Reset all message counts (admin only)")
 async def resetcounts(interaction: discord.Interaction):
+    await interaction.response.defer()
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
-        logger.warning(f"User {interaction.user.name} (ID: {interaction.user.id}) attempted /resetcounts without admin permissions in guild {interaction.guild.name}")
+        await interaction.followup.send("You need administrator permissions to use this command!", ephemeral=True)
+        logger.warning(f"User {interaction.user.name} attempted /resetcounts without admin permissions")
         return
 
     try:
-        global message_counts, last_reset
+        global message_counts, message_timestamps, last_reset
         message_counts = {}
+        message_timestamps = {}
         last_reset = int(time.time())
         save_message_counts({
             "counts": message_counts,
+            "timestamps": message_timestamps,
             "last_reset": last_reset
         })
         save_bot_log("reset", f"Message counts reset by {interaction.user.name} (ID: {interaction.user.id})")
-        await interaction.response.send_message("Message counts have been reset!", ephemeral=True)
-        logger.info("Message counts reset by admin")
+        await interaction.followup.send("Message counts and timestamps have been reset!", ephemeral=True)
+        logger.info("Message counts and timestamps reset")
     except Exception as e:
-        logger.error(f"Error in /resetcounts command: {e}")
-        await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
+        logger.error(f"Error in /resetcounts command: {str(e)}")
+        await interaction.followup.send("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
-# Slash command: /setexcludedchannel (admin only) with inline input
+# Slash command: /setexcludedchannel
 @bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
-@discord.app_commands.describe(channel_id="The ID of the channel to exclude (e.g., 123456789012345678)")
 @discord.app_commands.check(lambda ctx: ctx.user.guild_permissions.administrator)
-async def setexcludedchannel(interaction: discord.Interaction, channel_id: str):
-    logger.info(f"/setexcludedchannel triggered by {interaction.user.name} (ID: {interaction.user.id}) in guild {interaction.guild.name} (ID: {interaction.guild.id})")
-
-    if channel_id.lower() == 'cancel':
-        await interaction.response.send_message("Action cancelled!", ephemeral=True)
-        logger.info("Action cancelled by user")
-        return
+async def setexcludedchannel(interaction: discord.Interaction):
+    await interaction.response.send_message("Please provide the channel ID to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
+    
+    def check(m):
+        return m.author == interaction.user and m.channel == interaction.channel
 
     try:
-        channel_id = int(channel_id)
-        channel = interaction.guild.get_channel(channel_id)
-        if not channel:
-            await interaction.response.send_message("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
-            logger.error(f"Invalid channel ID provided: {channel_id}")
+        response = await bot.wait_for('message', check=check, timeout=60.0)
+        channel_id = response.content.strip()
+        if channel_id.lower() == 'cancel':
+            await interaction.followup.send("Action cancelled!", ephemeral=True)
             return
 
-        global EXCLUDED_CHANNEL_ID
-        EXCLUDED_CHANNEL_ID = channel_id
-        logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
+        try:
+            channel_id = int(channel_id)
+            channel = interaction.guild.get_channel(channel_id)
+            if not channel:
+                await interaction.followup.send("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
+                return
 
-        with open('.env', 'r') as file:
-            lines = file.readlines()
-        with open('.env', 'w') as file:
-            for line in lines:
-                if line.startswith('EXCLUDED_CHANNEL_ID='):
-                    file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
-                else:
-                    file.write(line)
-        logger.info("Updated .env file with new EXCLUDED_CHANNEL_ID")
+            global EXCLUDED_CHANNEL_ID
+            EXCLUDED_CHANNEL_ID = channel_id
+            with open('.env', 'r') as file:
+                lines = file.readlines()
+            with open('.env', 'w') as file:
+                for line in lines:
+                    if line.startswith('EXCLUDED_CHANNEL_ID='):
+                        file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
+                    else:
+                        file.write(line)
 
-        save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user.name} (ID: {interaction.user.id})")
-        await interaction.response.send_message(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.", ephemeral=True)
-        logger.info(f"Excluded channel updated to {channel_id} by {interaction.user.name}")
-    except ValueError:
-        await interaction.response.send_message("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
-        logger.error("Invalid channel ID provided")
-    except PermissionError:
-        await interaction.response.send_message("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
-        logger.error(f"Permission denied updating .env for {interaction.user.name}")
-    except Exception as e:
-        await interaction.response.send_message("Something went wrong! Please try again.", ephemeral=True)
-        logger.error(f"Error setting excluded channel: {e}")
+            save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user.name} (ID: {interaction.user.id})")
+            await interaction.followup.send(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.", ephemeral=True)
+            logger.info(f"Excluded channel updated to {channel_id} by {interaction.user.name}")
+        except ValueError:
+            await interaction.followup.send("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
+        except PermissionError:
+            await interaction.followup.send("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
+            logger.error(f"Permission denied updating .env for {interaction.user.name}")
+        except Exception as e:
+            await interaction.followup.send("Something went wrong! Please try again.", ephemeral=True)
+            logger.error(f"Error setting excluded channel: {e}")
+    except asyncio.TimeoutError:
+        await interaction.followup.send("You took too long! Action cancelled.", ephemeral=True)
+        logger.warning(f"Timeout setting excluded channel for {interaction.user.name}")
 
 # Bot token from .env
 bot.run(os.getenv('BOT_TOKEN'))
