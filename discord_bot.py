@@ -248,7 +248,7 @@ async def ping(interaction: discord.Interaction):
 
 # Slash command: /leaderboard
 @bot.tree.command(name="leaderboard", description="Display the leaderboard for a specific timeframe")
-@discord.app_commands.describe(timeframe="Timeframe to filter the leaderboard (1h, 24h, 7d, 14d, all); defaults to 'all'")
+@discord.app_commands.describe(timeframe="Timeframe to filter the leaderboard (1h, 1d, 24h, 7d, 14d, all); defaults to 'all'")
 async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
     await interaction.response.defer()  # Defer to avoid timeout
     try:
@@ -269,6 +269,7 @@ async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
         current_time = time.time()
         timeframe_options = {
             "1h": 3600,    # 1 hour in seconds
+            "1d": 86400,   # 1 day in seconds
             "24h": 86400,  # 24 hours in seconds
             "7d": 604800,  # 7 days in seconds
             "14d": 1209600, # 14 days in seconds
@@ -276,13 +277,13 @@ async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
         }
 
         if timeframe not in timeframe_options:
-            await interaction.followup.send("Invalid timeframe! Use 1h, 24h, 7d, 14d, or all.", ephemeral=True)
+            await interaction.followup.send("Invalid timeframe! Use 1h, 1d, 24h, 7d, 14d, or all.", ephemeral=True)
             return
 
         leaderboard = []
         member_count = 0
         member_loop_start = time.time()
-        for member in guild.members:  # Process all members
+        for member in guild.members:  # Use cached members
             member_count += 1
             user_id = str(member.id)
             if timeframe == "all":
@@ -317,8 +318,7 @@ async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
             embed = discord.Embed(
                 title=f"🏆 {guild.name} Leaderboard ({tf if tf != 'all' else 'All Time'})",
                 description=f"```{table}```",
-                color=0x00ff00,  # Green border
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow()  # Transparent UI: No color set
             )
             embed.set_thumbnail(url=guild.icon.url if guild.icon else bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
             server_info = f"Members: {guild.member_count} | Created: {guild.created_at.strftime('%Y-%m-%d')}"
@@ -387,8 +387,30 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             await interaction.followup.send("Guild not available in interaction.", ephemeral=True)
             return
 
-        # Fetch all members to ensure the cache is populated
-        await guild.members.fetch()
+        # Attempt to fetch members with pagination and retry (no direct permission check, rely on intent)
+        members = []
+        after = None
+        max_retries = 3
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                fetched_members = await guild.members.fetch(limit=1000, after=after, timeout=15.0)  # Paginate with 1000 limit
+                if not fetched_members:
+                    break
+                members.extend(fetched_members)
+                after = fetched_members[-1].id
+                await asyncio.sleep(1)  # Respect rate limits
+            except discord.HTTPException as e:
+                logger.error(f"HTTP error fetching members in guild {guild.name}: {str(e)}. Retry {retry_count + 1}/{max_retries}")
+                retry_count += 1
+                await asyncio.sleep(2 ** retry_count)  # Exponential backoff
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error fetching members in guild {guild.name}: {str(e)}")
+                break
+        if not members:
+            logger.warning(f"No members fetched for guild {guild.name}, falling back to cache")
+            members = guild.members  # Fallback to cached members
 
         # Find the role (case-insensitive)
         target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
@@ -398,12 +420,12 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
 
         # Get members with the role
         leaderboard = []
-        for member in guild.members:  # Process all members
+        for member in members:
             if target_role in member.roles:
                 user_id = str(member.id)
                 count = message_counts.get(user_id, 0)  # Default to 0 if no messages
                 username = member.display_name[:15] if len(member.display_name) > 15 else member.display_name
-                leaderboard.append((username, count))  # Include all members with the role, even with 0 messages
+                leaderboard.append((username, count))
 
         if not leaderboard:
             await interaction.followup.send(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
@@ -424,8 +446,7 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             embed = discord.Embed(
                 title=f"🏆 {target_role.name} Message Leaderboard",
                 description=f"```{table}```",
-                color=0x00ff00,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.utcnow()  # Transparent UI: No color set
             )
             embed.set_thumbnail(url=guild.icon.url if guild.icon else bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
             embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages}")
@@ -456,12 +477,27 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
                     await interaction.followup.send("The bot lacks permission to manage reactions. Please grant 'Manage Messages' permission.", ephemeral=True)
                     break
                 except Exception as e:
+                    logger.error(f"Error in pagination for message {message.id}: {str(e)}")
                     await interaction.followup.send("An error occurred during pagination. Please try again.", ephemeral=True)
                     break
     except discord.errors.Forbidden as e:
+        logger.error(f"Forbidden error in /rolecount: {str(e)}. Guild: {guild.name if guild else 'None'}, Role: {role_name}")
         await interaction.followup.send("The bot lacks necessary permissions. Ensure it has 'View Members' and 'Send Messages' permissions.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
+        logger.error(f"Error in /rolecount command: {str(e)}. Guild: {guild.name if guild else 'None'}, Role: {role_name}")
+        await interaction.followup.send("An error occurred while generating the role leaderboard. Please try again. Check logs.", ephemeral=True)
+
+# Slash command: /timer
+@bot.tree.command(name="timer", description="Set a countdown timer in minutes")
+@discord.app_commands.describe(minutes="Number of minutes for the timer")
+async def timer(interaction: discord.Interaction, minutes: int):
+    await interaction.response.send_message(f"Timer set for {minutes} minute(s). I’ll notify you when it’s done!", ephemeral=True)
+    logger.info(f"Timer started for {minutes} minutes by {interaction.user.name} (ID: {interaction.user.id})")
+    save_bot_log("timer", f"Timer started for {minutes} minutes by {interaction.user.name} (ID: {interaction.user.id})")
+    await asyncio.sleep(minutes * 60)  # Convert minutes to seconds
+    await interaction.followup.send(f"Timer finished for {interaction.user.mention}!")
+    logger.info(f"Timer expired for {interaction.user.name} (ID: {interaction.user.id})")
+    save_bot_log("timer", f"Timer expired for {interaction.user.name} (ID: {interaction.user.id})")
 
 # Slash command: /resetcounts
 @bot.tree.command(name="resetcounts", description="Reset all message counts (admin only)")
