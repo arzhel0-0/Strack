@@ -1,0 +1,10 @@
+{
+    "logs": [
+        {
+            "timestamp": "YYYY-MM-DD HH:MM:SS UTC",
+            "event": "event_type",
+            "details": "event_description"
+        }
+        
+    ]
+}
