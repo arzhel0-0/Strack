@@ -73,7 +73,7 @@ Here’s what you can do with Strack—give these a try!
 - **Fun Stuff**: Lets you start fresh with a quick confirmation message.
 
 ## **What’s in the Folder**
-- `bot.py`: The heart of Strack—where the magic happens.
+- `discord_bot.py`: The heart of Strack—where the magic happens.
 - `message_counts.json`: Keeps track of who’s chatted and when it last reset (starts with sample data).
 - `bot_logs.json`: Logs all the bot’s adventures (starts empty).
 - `README.md`: This handy guide!
