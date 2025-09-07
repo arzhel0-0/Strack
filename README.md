@@ -108,11 +108,11 @@ If the terminal shows errors, double-check your YOUR_BOT_TOKEN and EXCLUDED_CHAN
 
 # Customization Notes
 
-### Repository URL: Swap https://github.com/yourusername/yourrepo.git with your actual GitHub link.
-### Bot Token: Users need to grab their own token from the Discord Developer Portal and keep it safe.
-### Channel ID: The EXCLUDED_CHANNEL_ID placeholder (0) needs a real ID from users.
-### License: Update the LICENSE file with your name or team (e.g., "Your Name" or "Strack Crew").
-### .gitignore: Use the recommended version from my previous response (Option 1, ignoring message_counts.json and bot_logs.json):
+ Repository URL: Swap https://github.com/yourusername/yourrepo.git with your actual GitHub link.
+ Bot Token: Users need to grab their own token from the Discord Developer Portal and keep it safe.
+ Channel ID: The EXCLUDED_CHANNEL_ID placeholder (0) needs a real ID from users.
+ License: Update the LICENSE file with your name or team (e.g., "Your Name" or "Strack Crew").
+ .gitignore: Use the recommended version from my previous response (Option 1, ignoring message_counts.json and bot_logs.json):
 
  ```# Python
 __pycache__/
