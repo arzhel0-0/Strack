@@ -3,7 +3,10 @@
 
 Hey there! Meet **Strack**, your friendly neighborhood Discord bot that’s here to track message activity and spice up your server with awesome leaderboards! Built with Python and the `discord.py` library, Strack is perfect for communities, gaming crews, or any server where roles matter. It’s all about celebrating your most chatty members in style!
 
-### INVITE STRACK TO YOUR SERVER: https://discord.com/oauth2/authorize?client_id=1377959085973966898&permissions=9897552522385&integration_type=0&scope=applications.commands+bot
+### INVITE STRACK TO YOUR SERVER: 
+https://discord.com/oauth2/authorize?client_id=1377959085973966898&permissions=9897552522385&integration_type=0&scope=applications.commands+bot
+
+
 ## **Welcome to Strack!**
 
 Imagine a bot that not only keeps an eye on who’s chatting the most but also rolls out cool leaderboards to show off their skills. That’s **Strack** for you! It watches messages in real-time, skips the bot spam and a channel you pick, and lets you see who’s dominating the convo—whether it’s the "Agent" role or any other crew you’ve got. With a snazzy embed design and simple commands, Strack is ready to bring some fun to your server!
