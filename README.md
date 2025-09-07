@@ -148,7 +148,7 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 - **Fun Stuff**: Strack will ask for the ID, update its settings, and ignore that channel moving forward. Enable Developer Mode in Discord to get the ID!
 
 ### **/ping**
-- **Checks whether the bot is responsive*
+- **Checks whether the bot is responsive**
 
 ## **What’s in the Folder**
 - `discord_bot.py`: The heart of Strack—where the magic happens.
