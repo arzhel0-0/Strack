@@ -146,7 +146,7 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 
 ### **/setexcludedchannel**
 - **What It Does**: Sets or updates the channel ID to exclude from message counting.
-- **How to Use**: `/setexcludedchannel` followed by the channel ID (e.g., `123456789012345678`) or ‘cancel’ to abort.
+- **How to Use**: `/setexcludedchannel` followed by the channel ID in the next message (e.g., `123456789012345678`) or ‘cancel’ to abort.
 - **Who Can Use**: Admins only!
 - **Fun Stuff**: Strack will ask for the ID, update its settings, and ignore that channel moving forward. Enable Developer Mode in Discord to get the ID!
 
