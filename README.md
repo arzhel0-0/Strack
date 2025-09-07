@@ -54,7 +54,7 @@ Ready to bring Strack to your server? Here’s how to get started—don’t worr
 ### **Step 5: Generate Data Files**
 - Run the bot once (`python bot.py`) to automatically create `message_counts.json` and `bot_logs.json` with default structures. These files will track messages and logs, so no need to add them manually!
 
-## **## RUN STRACK ON YOUR TERMINAL (NO HOSTING NEEDED!) ##**
+ ## RUN STRACK ON YOUR TERMINAL (NO HOSTING NEEDED!)
 
 Don’t have a fancy hosting service? No problem! You can fire up **Strack** right on your own computer using the terminal. It’s super easy, and we’ll walk you through it step by step. All you need is your PC or laptop and a bit of patience—let’s get Strack chatting in your server!
 
@@ -122,8 +122,6 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 - **ModuleNotFoundError: dotenv**: Make sure you installed `python-dotenv` with `pip install python-dotenv`.
 
 ## **Strack’s Commands**
-
-Here’s what you can do with Strack—give these a try! Use the `/` prefix followed by the command name (e.g., `/leaderboard).
 
 ### **/leaderboard**
 - **What It Does**: Shows off a leaderboard for the "Agent" role’s top talkers.
