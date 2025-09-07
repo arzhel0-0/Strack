@@ -78,6 +78,7 @@ Here’s what you can do with Strack—give these a try!
 - `bot_logs.json`: Logs all the bot’s adventures (starts empty).
 - `README.md`: This handy guide!
 - `LICENSE`: MIT License so you can use and share Strack freely.
+- `requirements.txt`: Shows the requirements
 - `.gitignore`: Tells Git what to skip.
 
 ## **Join the Fun!**
