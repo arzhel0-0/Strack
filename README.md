@@ -152,6 +152,11 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 - **Who Can Use**: Admins only!
 - **Fun Stuff**: Strack will ask for the ID, update its settings, and ignore that channel moving forward. Enable Developer Mode in Discord to get the ID!
 
+### **/timer**
+- **What It Does**: Sets a timer in minutes as per the users wish and notifies the user after it is done.
+- **How to Use**: `/timer` and followed by the time in minutes.
+- **Who Can Use**: Anyone!
+
 ### **/ping**
 - **Checks whether the bot is responsive**
 
