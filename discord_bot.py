@@ -253,7 +253,8 @@ async def leaderboard(interaction: discord.Interaction):
         for member in guild.members:
             user_id = str(member.id)
             count = message_counts.get(user_id, 0)
-            username = (member.name[:12] + "...") if len(member.name) > 15 else member.name
+            username = member.mention  # Use mention for blue ping color
+            username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
             leaderboard.append((username, count))
 
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
@@ -273,16 +274,22 @@ async def leaderboard(interaction: discord.Interaction):
             page = pages[page_num]
             max_name_length = max(len(name) for name, _ in page) if page else len("Username")
             max_name_length = max(max_name_length, len("Username"))
+            max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            table = f"{'Rank':<8} | {'Username':<{max_name_length}} | {'Messages':<8}\n"
-            table += "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8 + "\n"
+            # Plain text table with aligned ranks, no code block markers
+            table_lines = [
+                f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
+                "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
+            ]
             for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
-                rank = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i)
-                table += f"{rank:<8} | {username:<{max_name_length}} | {count:<8}\n"
+                rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
+                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}} | {count:<8}")
+
+            table = "\n".join(table_lines)
 
             embed = discord.Embed(
                 title=f"🏆 {guild.name} and the Leaderboard",
-                description=f"```css\n{table}```",
+                description=table,
                 color=EMBED_BORDER_COLOR,
                 timestamp=datetime.utcnow()
             )
@@ -332,7 +339,8 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             if target_role in member.roles:
                 user_id = str(member.id)
                 count = message_counts.get(user_id, 0)
-                username = (member.name[:12] + "...") if len(member.name) > 15 else member.name
+                username = member.mention  # Use mention for blue ping color
+                username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
                 leaderboard.append((username, count))
 
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
@@ -352,16 +360,22 @@ async def rolecount(interaction: discord.Interaction, role_name: str):
             page = pages[page_num]
             max_name_length = max(len(name) for name, _ in page) if page else len("Username")
             max_name_length = max(max_name_length, len("Username"))
+            max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            table = f"{'Rank':<8} | {'Username':<{max_name_length}} | {'Messages':<8}\n"
-            table += "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8 + "\n"
+            # Plain text table with aligned ranks, no code block markers
+            table_lines = [
+                f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
+                "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
+            ]
             for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
-                rank = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i)
-                table += f"{rank:<8} | {username:<{max_name_length}} | {count:<8}\n"
+                rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
+                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}} | {count:<8}")
+
+            table = "\n".join(table_lines)
 
             embed = discord.Embed(
                 title=f"🏆 {target_role.name} Message Leaderboard",
-                description=f"```css\n{table}```",
+                description=table,
                 color=EMBED_BORDER_COLOR,
                 timestamp=datetime.utcnow()
             )
@@ -419,6 +433,7 @@ async def resetcounts(interaction: discord.Interaction):
         await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
 # Slash command: /setexcludedchannel (admin only)
+
 @bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
 async def setexcludedchannel(interaction: discord.Interaction):
     logger.info(f"/setexcludedchannel triggered by {interaction.user.name} (ID: {interaction.user.id}) in guild {interaction.guild.name} (ID: {interaction.guild.id})")
@@ -428,14 +443,18 @@ async def setexcludedchannel(interaction: discord.Interaction):
         return
 
     try:
-        await interaction.response.send_message("Please provide the channel ID you want to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
+        await interaction.response.send_message(
+            "Please provide the channel ID you want to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.",
+            ephemeral=True
+        )
         logger.info("Sent initial response for /setexcludedchannel")
-        
+
         def check(m):
             return m.author == interaction.user and m.channel == interaction.channel
 
         response = await bot.wait_for('message', check=check, timeout=60.0)
         channel_id = response.content.strip()
+
         logger.info(f"Received response: {channel_id}")
 
         if channel_id.lower() == 'cancel':
@@ -445,7 +464,13 @@ async def setexcludedchannel(interaction: discord.Interaction):
 
         try:
             channel_id = int(channel_id)
-            # Update the EXCLUDED_CHANNEL_ID globally and in .env
+            # Verify the channel exists and the bot can access it
+            channel = interaction.guild.get_channel(channel_id)
+            if not channel:
+                await interaction.followup.send("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
+                logger.error(f"Invalid channel ID provided: {channel_id}")
+                return
+
             global EXCLUDED_CHANNEL_ID
             EXCLUDED_CHANNEL_ID = channel_id
             logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
