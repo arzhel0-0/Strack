@@ -72,7 +72,7 @@ Here’s what you can do with Strack—give these a try!
 - **Who Can Use**: Admins only!
 - **Fun Stuff**: Lets you start fresh with a quick confirmation message.
 
-## **What’s in the Folder**
+# **What’s in the Folder**
 - `discord_bot.py`: The heart of Strack—where the magic happens.
 - `message_counts.json`: Keeps track of who’s chatted and when it last reset (starts with sample data).
 - `bot_logs.json`: Logs all the bot’s adventures (starts empty).
@@ -84,23 +84,63 @@ Here’s what you can do with Strack—give these a try!
 ## **Join the Fun!**
 Spot a glitch or have a cool idea? Drop an issue on this GitHub repo or send a pull request. We’d love your input to make Strack even better!
 
-## **License**
+# **License**
 Strack comes with the [MIT License](LICENSE), meaning you can use, tweak, and share it as long as you give a shoutout. Check the `LICENSE` file for the full scoop.
 
-## **Quick Tips**
+# **Quick Tips**
 - **Setup**: Make sure `EXCLUDED_CHANNEL_ID` and `YOUR_BOT_TOKEN` are filled in before launching.
 - **Logs**: Peek at `bot_logs.json` to see what Strack’s been up to.
 - **Help**: Got questions? Hit up the maintainers via GitHub Issues.
 
 ---
 
-### Customization Notes
-- **Repository URL**: Swap `https://github.com/yourusername/yourrepo.git` with your actual GitHub link.
-- **Bot Token**: Users need to grab their own token from the Discord Developer Portal and keep it safe.
-- **Channel ID**: The `EXCLUDED_CHANNEL_ID` placeholder (0) needs a real ID from users.
-- **License**: Update the `LICENSE` file with your name or team (e.g., "Your Name" or "Strack Crew").
+# RUN STRACK ON YOUR TERMINAL
+## Don’t have a hosting service? No problem! You can run Strack right from your own computer using the terminal. Here’s how to do it super easily:What You Need: Just a PC or laptop with Python installed (download it from python.org if you don’t have it).
 
-### How to Use
+Steps:Follow the Installation Steps above to clone the repo and install discord.py.
+Open your terminal (Command Prompt on Windows, Terminal on Mac/Linux).
+Navigate to the yourrepo folder with cd yourrepo.
+Type python discord_bot.py and hit Enter—Strack will start running!
+Keep the terminal open while the bot is active. If you close it, Strack will go offline.
+
+Tips: Make sure your internet is on—Strack needs it to chat with Discord!
+If the terminal shows errors, double-check your YOUR_BOT_TOKEN and EXCLUDED_CHANNEL_ID in bot.py.
+
+# Customization Notes
+
+### Repository URL: Swap https://github.com/yourusername/yourrepo.git with your actual GitHub link.
+### Bot Token: Users need to grab their own token from the Discord Developer Portal and keep it safe.
+### Channel ID: The EXCLUDED_CHANNEL_ID placeholder (0) needs a real ID from users.
+### License: Update the LICENSE file with your name or team (e.g., "Your Name" or "Strack Crew").
+### .gitignore: Use the recommended version from my previous response (Option 1, ignoring message_counts.json and bot_logs.json):
+
+ ```# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+
+# Runtime-generated files
+message_counts.json
+bot_logs.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+*.sublime-workspace
+*.vscode/
+ ```
+
+# Sensitive data (if using environment files)
+.env ```
+
+# How to Use
 1. Save this as `README.md` in your repo root.
 2. Commit and push to GitHub:
    ```bash
