@@ -269,13 +269,14 @@ async def leaderboard(interaction: discord.Interaction):
             max_name_length = max(max_name_length, len("Username"))
             max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
+            # Add gap between Username and Messages with extra padding
             table_lines = [
-                f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
-                "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
+                f"Rank    | Username{' ' * (max_name_length - 8 + 4)} | Messages",  # +4 for gap
+                "=" * 8 + "=+" + "=" * (max_name_length + 4) + "=+" + "=" * 8
             ]
             for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
                 rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
-                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}} | {count:<8}")
+                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}}    | {count:<8}")  # Added 4 spaces for gap
 
             table = "\n".join(table_lines)
 
@@ -315,110 +316,92 @@ async def leaderboard(interaction: discord.Interaction):
         logger.error(f"Error in /leaderboard command: {e}")
         await interaction.response.send_message("An error occurred while generating the leaderboard. Please try again.", ephemeral=True)
 
-# Slash command: /rolecount (available to all) with modal
+# Slash command: /rolecount (available to all) with inline input
 @bot.tree.command(name="rolecount", description="Display the leaderboard for a specified role")
-async def rolecount(interaction: discord.Interaction):
-    class RoleNameModal(discord.ui.Modal, title="Select Role"):
-        role_name_input = discord.ui.TextInput(
-            label="Role Name",
-            placeholder="Enter the role name (e.g., 'Admin') or 'cancel'",
-            required=True,
-            max_length=100
-        )
+@discord.app_commands.describe(role_name="The name of the role to filter the leaderboard (e.g., 'Admin')")
+async def rolecount(interaction: discord.Interaction, role_name: str):
+    try:
+        guild = interaction.guild
+        target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
+        if not target_role:
+            await interaction.response.send_message(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.", ephemeral=True)
+            logger.warning(f"Role '{role_name}' not found in guild {guild.name}")
+            return
 
-        async def on_submit(self, interaction: discord.Interaction):
-            role_name = self.role_name_input.value.strip()
-            logger.info(f"Received role name input: {role_name}")
+        leaderboard = []
+        for member in guild.members:
+            if target_role in member.roles:
+                user_id = str(member.id)
+                count = message_counts.get(user_id, 0)
+                username = member.display_name
+                username = username if len(username) <= 15 else username[:15] + "..."
+                leaderboard.append((username, count))
 
-            if role_name.lower() == 'cancel':
-                await interaction.response.send_message("Action cancelled!", ephemeral=True)
-                logger.info("Action cancelled by user")
-                return
+        leaderboard.sort(key=lambda x: (-x[1], x[0]))
 
-            guild = interaction.guild
-            target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
-            if not target_role:
-                await interaction.response.send_message(f"No role named '{role_name}' found in this server! Use quotes for roles with spaces.", ephemeral=True)
-                logger.warning(f"Role '{role_name}' not found in guild {guild.name}")
-                return
+        if not leaderboard:
+            await interaction.response.send_message(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
+            logger.info(f"No members with role '{role_name}' in guild {guild.name}")
+            return
 
-            leaderboard = []
-            for member in guild.members:
-                if target_role in member.roles:
-                    user_id = str(member.id)
-                    count = message_counts.get(user_id, 0)
-                    username = member.display_name
-                    username = username if len(username) <= 15 else username[:15] + "..."
-                    leaderboard.append((username, count))
+        total_messages = sum(count for _, count in leaderboard)
+        users_per_page = 10
+        pages = [leaderboard[i:i + users_per_page] for i in range(0, len(leaderboard), users_per_page)]
+        total_pages = len(pages)
+        current_page = 0
 
-            leaderboard.sort(key=lambda x: (-x[1], x[0]))
+        def generate_embed(page_num):
+            page = pages[page_num]
+            max_name_length = max(len(name) for name, _ in page) if page else len("Username")
+            max_name_length = max(max_name_length, len("Username"))
+            max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            if not leaderboard:
-                await interaction.response.send_message(f"No members with the '{role_name}' role found in this server!", ephemeral=True)
-                logger.info(f"No members with role '{role_name}' in guild {guild.name}")
-                return
+            # Add gap between Username and Messages with extra padding
+            table_lines = [
+                f"Rank    | Username{' ' * (max_name_length - 8 + 4)} | Messages",  # +4 for gap
+                "=" * 8 + "=+" + "=" * (max_name_length + 4) + "=+" + "=" * 8
+            ]
+            for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
+                rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
+                table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}}    | {count:<8}")  # Added 4 spaces for gap
 
-            total_messages = sum(count for _, count in leaderboard)
-            users_per_page = 10
-            pages = [leaderboard[i:i + users_per_page] for i in range(0, len(leaderboard), users_per_page)]
-            total_pages = len(pages)
-            current_page = 0
+            table = "\n".join(table_lines)
 
-            def generate_embed(page_num):
-                page = pages[page_num]
-                max_name_length = max(len(name) for name, _ in page) if page else len("Username")
-                max_name_length = max(max_name_length, len("Username"))
-                max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
+            embed = discord.Embed(
+                title=f"🏆 {target_role.name} Message Leaderboard",
+                description=table,
+                color=EMBED_BORDER_COLOR,
+                timestamp=datetime.utcnow()
+            )
+            thumbnail_url = guild.icon.url if guild.icon else (bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
+            embed.set_thumbnail(url=thumbnail_url)
+            embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
+            return embed
 
-                table_lines = [
-                    f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
-                    "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
-                ]
-                for i, (username, count) in enumerate(page, page_num * users_per_page + 1):
-                    rank_display = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i).center(5)
-                    table_lines.append(f"{rank_display:^8} | {username:<{max_name_length}} | {count:<8}")
+        await interaction.response.send_message(embed=generate_embed(current_page))
+        if total_pages > 1:
+            message = await interaction.original_response()
+            await message.add_reaction("⬅️")
+            await message.add_reaction("➡️")
 
-                table = "\n".join(table_lines)
+            def check(reaction, user):
+                return user == interaction.user and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
 
-                embed = discord.Embed(
-                    title=f"🏆 {target_role.name} Message Leaderboard",
-                    description=table,
-                    color=EMBED_BORDER_COLOR,
-                    timestamp=datetime.utcnow()
-                )
-                thumbnail_url = guild.icon.url if guild.icon else (bot.user.avatar.url if bot.user.avatar else bot.user.default_avatar.url)
-                embed.set_thumbnail(url=thumbnail_url)
-                embed.set_footer(text=f"Page {page_num + 1}/{total_pages} | Total Messages: {total_messages} | Last Reset: {datetime.fromtimestamp(last_reset).strftime('%Y-%m-%d %H:%M UTC') if last_reset else 'Never'}")
-                return embed
-
-            await interaction.response.send_message(embed=generate_embed(current_page))
-            if total_pages > 1:
-                message = await interaction.original_response()
-                await message.add_reaction("⬅️")
-                await message.add_reaction("➡️")
-
-                def check(reaction, user):
-                    return user == interaction.user and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
-
-                while True:
-                    try:
-                        reaction, user = await bot.wait_for("reaction_add", timeout=60.0, check=check)
-                        if str(reaction.emoji) == "➡️" and current_page < total_pages - 1:
-                            current_page += 1
-                        elif str(reaction.emoji) == "⬅️" and current_page > 0:
-                            current_page -= 1
-                        await message.edit(embed=generate_embed(current_page))
-                        await message.remove_reaction(reaction, user)
-                    except asyncio.TimeoutError:
-                        await message.clear_reactions()
-                        break
-
-        async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-            logger.error(f"Error in modal: {error}")
-            await interaction.response.send_message("An unexpected error occurred. Please try again.", ephemeral=True)
-
-    modal = RoleNameModal()
-    await interaction.response.send_modal(modal)
+            while True:
+                try:
+                    reaction, user = await bot.wait_for("reaction_add", timeout=60.0, check=check)
+                    if str(reaction.emoji) == "➡️" and current_page < total_pages - 1:
+                        current_page += 1
+                    elif str(reaction.emoji) == "⬅️" and current_page > 0:
+                        current_page -= 1
+                    await message.edit(embed=generate_embed(current_page))
+                    await message.remove_reaction(reaction, user)
+                except asyncio.TimeoutError:
+                    await message.clear_reactions()
+                    break
+    except Exception as e:
+        logger.error(f"Error in /rolecount command: {e}")
+        await interaction.response.send_message("An error occurred while generating the role leaderboard. Please try again.", ephemeral=True)
 
 # Slash command: /resetcounts (admin only)
 @bot.tree.command(name="resetcounts", description="Reset all message counts (admin only)")
@@ -443,73 +426,52 @@ async def resetcounts(interaction: discord.Interaction):
         logger.error(f"Error in /resetcounts command: {e}")
         await interaction.response.send_message("An error occurred while resetting counts. Please try again.", ephemeral=True)
 
-# Slash command: /setexcludedchannel (admin only) with modal
+# Slash command: /setexcludedchannel (admin only) with inline input
 @bot.tree.command(name="setexcludedchannel", description="Set the channel to exclude from message counting (admin only)")
-async def setexcludedchannel(interaction: discord.Interaction):
+@discord.app_commands.describe(channel_id="The ID of the channel to exclude (e.g., 123456789012345678)")
+@discord.app_commands.check(lambda ctx: ctx.user.guild_permissions.administrator)
+async def setexcludedchannel(interaction: discord.Interaction, channel_id: str):
     logger.info(f"/setexcludedchannel triggered by {interaction.user.name} (ID: {interaction.user.id}) in guild {interaction.guild.name} (ID: {interaction.guild.id})")
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You need administrator permissions to use this command!", ephemeral=True)
-        logger.warning(f"User {interaction.user.name} (ID: {interaction.user.id}) attempted /setexcludedchannel without admin permissions")
+
+    if channel_id.lower() == 'cancel':
+        await interaction.response.send_message("Action cancelled!", ephemeral=True)
+        logger.info("Action cancelled by user")
         return
 
-    class ChannelIDModal(discord.ui.Modal, title="Set Excluded Channel"):
-        channel_id_input = discord.ui.TextInput(
-            label="Channel ID",
-            placeholder="Enter the channel ID (e.g., 123456789012345678) or 'cancel'",
-            required=True,
-            max_length=18
-        )
+    try:
+        channel_id = int(channel_id)
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel:
+            await interaction.response.send_message("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
+            logger.error(f"Invalid channel ID provided: {channel_id}")
+            return
 
-        async def on_submit(self, interaction: discord.Interaction):
-            channel_id = self.channel_id_input.value.strip()
-            logger.info(f"Received channel ID input: {channel_id}")
+        global EXCLUDED_CHANNEL_ID
+        EXCLUDED_CHANNEL_ID = channel_id
+        logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
 
-            if channel_id.lower() == 'cancel':
-                await interaction.response.send_message("Action cancelled!", ephemeral=True)
-                logger.info("Action cancelled by user")
-                return
+        with open('.env', 'r') as file:
+            lines = file.readlines()
+        with open('.env', 'w') as file:
+            for line in lines:
+                if line.startswith('EXCLUDED_CHANNEL_ID='):
+                    file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
+                else:
+                    file.write(line)
+        logger.info("Updated .env file with new EXCLUDED_CHANNEL_ID")
 
-            try:
-                channel_id = int(channel_id)
-                channel = interaction.guild.get_channel(channel_id)
-                if not channel:
-                    await interaction.response.send_message("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
-                    logger.error(f"Invalid channel ID provided: {channel_id}")
-                    return
-
-                global EXCLUDED_CHANNEL_ID
-                EXCLUDED_CHANNEL_ID = channel_id
-                logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
-
-                with open('.env', 'r') as file:
-                    lines = file.readlines()
-                with open('.env', 'w') as file:
-                    for line in lines:
-                        if line.startswith('EXCLUDED_CHANNEL_ID='):
-                            file.write(f'EXCLUDED_CHANNEL_ID={channel_id}\n')
-                        else:
-                            file.write(line)
-                logger.info("Updated .env file with new EXCLUDED_CHANNEL_ID")
-
-                save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user.name} (ID: {interaction.user.id})")
-                await interaction.response.send_message(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.", ephemeral=True)
-                logger.info(f"Excluded channel updated to {channel_id} by {interaction.user.name}")
-            except ValueError:
-                await interaction.response.send_message("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
-                logger.error("Invalid channel ID provided")
-            except PermissionError:
-                await interaction.response.send_message("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
-                logger.error(f"Permission denied updating .env for {interaction.user.name}")
-            except Exception as e:
-                await interaction.response.send_message("Something went wrong! Please try again.", ephemeral=True)
-                logger.error(f"Error setting excluded channel: {e}")
-
-        async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-            logger.error(f"Error in modal: {error}")
-            await interaction.response.send_message("An unexpected error occurred. Please try again.", ephemeral=True)
-
-    modal = ChannelIDModal()
-    await interaction.response.send_modal(modal)
+        save_bot_log("config", f"Excluded channel set to {channel_id} by {interaction.user.name} (ID: {interaction.user.id})")
+        await interaction.response.send_message(f"Excluded channel set to ID {channel_id}! Strack will now ignore this channel.", ephemeral=True)
+        logger.info(f"Excluded channel updated to {channel_id} by {interaction.user.name}")
+    except ValueError:
+        await interaction.response.send_message("Invalid channel ID! Please enter a valid number or 'cancel'.", ephemeral=True)
+        logger.error("Invalid channel ID provided")
+    except PermissionError:
+        await interaction.response.send_message("I don’t have permission to update the .env file. Please check file permissions!", ephemeral=True)
+        logger.error(f"Permission denied updating .env for {interaction.user.name}")
+    except Exception as e:
+        await interaction.response.send_message("Something went wrong! Please try again.", ephemeral=True)
+        logger.error(f"Error setting excluded channel: {e}")
 
 # Bot token from .env
 bot.run(os.getenv('BOT_TOKEN'))
