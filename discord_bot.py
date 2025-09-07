@@ -43,7 +43,6 @@ def load_message_counts():
     try:
         with open(MESSAGE_COUNTS_FILE, 'r') as f:
             data = json.load(f)
-            # Validate JSON structure
             if not isinstance(data, dict):
                 logger.error(f"{MESSAGE_COUNTS_FILE} contains invalid JSON: not a dictionary")
                 save_message_counts(default_data)
@@ -69,7 +68,6 @@ def load_message_counts():
 # Save message counts and metadata to file
 def save_message_counts(data):
     try:
-        # Ensure data has required structure
         if not isinstance(data, dict):
             logger.error(f"Invalid data type for saving to {MESSAGE_COUNTS_FILE}: {type(data)}")
             data = {"counts": {}, "last_reset": int(time.time())}
@@ -78,11 +76,10 @@ def save_message_counts(data):
         if "last_reset" not in data:
             data["last_reset"] = int(time.time())
 
-        # Write to a temporary file first to avoid corruption
         temp_file = MESSAGE_COUNTS_FILE + '.tmp'
         with open(temp_file, 'w') as f:
             json.dump(data, f, indent=4)
-        os.replace(temp_file, MESSAGE_COUNTS_FILE)  # Atomic replace
+        os.replace(temp_file, MESSAGE_COUNTS_FILE)
         logger.info(f"Saved data to {MESSAGE_COUNTS_FILE}")
     except PermissionError as e:
         logger.error(f"PermissionError saving to {MESSAGE_COUNTS_FILE}: {e}")
@@ -100,7 +97,6 @@ def load_bot_logs():
     try:
         with open(BOT_LOGS_FILE, 'r') as f:
             data = json.load(f)
-            # Validate JSON structure
             if not isinstance(data, dict):
                 logger.error(f"{BOT_LOGS_FILE} contains invalid JSON: not a dictionary")
                 save_bot_log("error", f"Invalid JSON in {BOT_LOGS_FILE}, resetting")
@@ -131,11 +127,10 @@ def save_bot_log(event, details):
         }
         data["logs"].append(log_entry)
 
-        # Write to a temporary file first to avoid corruption
         temp_file = BOT_LOGS_FILE + '.tmp'
         with open(temp_file, 'w') as f:
             json.dump(data, f, indent=4)
-        os.replace(temp_file, BOT_LOGS_FILE)  # Atomic replace
+        os.replace(temp_file, BOT_LOGS_FILE)
         logger.info(f"Saved log entry: {event} - {details}")
     except PermissionError as e:
         logger.error(f"PermissionError saving to {BOT_LOGS_FILE}: {e}")
@@ -154,7 +149,6 @@ async def on_ready():
     save_bot_log("online", f"Bot logged in as {bot.user}")
     try:
         await bot.change_presence(activity=discord.Game(name="Chat Leaderboard | /help"))
-        # Check for GUILD_IDS environment variable for per-guild sync
         guild_ids = os.getenv('GUILD_IDS')
         if guild_ids:
             guild_ids = [int(id.strip()) for id in guild_ids.split(',')]
@@ -164,7 +158,6 @@ async def on_ready():
                 logger.info(f"Synced commands for guild {guild_id}")
                 print(f"Registered commands for guild {guild_id}: {bot.tree.get_commands(guild=guild)}")
         else:
-            # Default to global sync for universal bot
             await bot.tree.sync()
             logger.info("Synced commands globally")
             print(f"Registered commands globally: {bot.tree.get_commands()}")
@@ -253,8 +246,8 @@ async def leaderboard(interaction: discord.Interaction):
         for member in guild.members:
             user_id = str(member.id)
             count = message_counts.get(user_id, 0)
-            username = member.display_name  # Use display name
-            username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
+            username = member.display_name
+            username = username if len(username) <= 15 else username[:15] + "..."
             leaderboard.append((username, count))
 
         leaderboard.sort(key=lambda x: (-x[1], x[0]))
@@ -276,7 +269,6 @@ async def leaderboard(interaction: discord.Interaction):
             max_name_length = max(max_name_length, len("Username"))
             max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-            # Plain text table with aligned ranks
             table_lines = [
                 f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
                 "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
@@ -326,13 +318,12 @@ async def leaderboard(interaction: discord.Interaction):
 # Slash command: /rolecount (available to all) with modal
 @bot.tree.command(name="rolecount", description="Display the leaderboard for a specified role")
 async def rolecount(interaction: discord.Interaction):
-    # Define the modal
     class RoleNameModal(discord.ui.Modal, title="Select Role"):
         role_name_input = discord.ui.TextInput(
             label="Role Name",
             placeholder="Enter the role name (e.g., 'Admin') or 'cancel'",
             required=True,
-            max_length=100  # Reasonable max length for role names
+            max_length=100
         )
 
         async def on_submit(self, interaction: discord.Interaction):
@@ -356,8 +347,8 @@ async def rolecount(interaction: discord.Interaction):
                 if target_role in member.roles:
                     user_id = str(member.id)
                     count = message_counts.get(user_id, 0)
-                    username = member.display_name  # Use display name
-                    username = username if len(username) <= 15 else username[:15] + "..."  # Truncate if too long
+                    username = member.display_name
+                    username = username if len(username) <= 15 else username[:15] + "..."
                     leaderboard.append((username, count))
 
             leaderboard.sort(key=lambda x: (-x[1], x[0]))
@@ -379,7 +370,6 @@ async def rolecount(interaction: discord.Interaction):
                 max_name_length = max(max_name_length, len("Username"))
                 max_count_length = max(len(str(count)) for _, count in page) if page else len("Messages")
 
-                # Plain text table with aligned ranks
                 table_lines = [
                     f"Rank    | Username{' ' * (max_name_length - 8)} | Messages",
                     "=" * 8 + "=+" + "=" * max_name_length + "=+" + "=" * 8
@@ -427,7 +417,6 @@ async def rolecount(interaction: discord.Interaction):
             logger.error(f"Error in modal: {error}")
             await interaction.response.send_message("An unexpected error occurred. Please try again.", ephemeral=True)
 
-    # Send the modal
     modal = RoleNameModal()
     await interaction.response.send_modal(modal)
 
@@ -463,13 +452,12 @@ async def setexcludedchannel(interaction: discord.Interaction):
         logger.warning(f"User {interaction.user.name} (ID: {interaction.user.id}) attempted /setexcludedchannel without admin permissions")
         return
 
-    # Define the modal
     class ChannelIDModal(discord.ui.Modal, title="Set Excluded Channel"):
         channel_id_input = discord.ui.TextInput(
             label="Channel ID",
             placeholder="Enter the channel ID (e.g., 123456789012345678) or 'cancel'",
             required=True,
-            max_length=18  # Discord channel IDs are up to 18 digits
+            max_length=18
         )
 
         async def on_submit(self, interaction: discord.Interaction):
@@ -483,7 +471,6 @@ async def setexcludedchannel(interaction: discord.Interaction):
 
             try:
                 channel_id = int(channel_id)
-                # Verify the channel exists and the bot can access it
                 channel = interaction.guild.get_channel(channel_id)
                 if not channel:
                     await interaction.response.send_message("Invalid channel ID! The bot could not find this channel.", ephemeral=True)
@@ -494,7 +481,6 @@ async def setexcludedchannel(interaction: discord.Interaction):
                 EXCLUDED_CHANNEL_ID = channel_id
                 logger.info(f"Updated EXCLUDED_CHANNEL_ID to {channel_id}")
 
-                # Update the .env file
                 with open('.env', 'r') as file:
                     lines = file.readlines()
                 with open('.env', 'w') as file:
@@ -522,7 +508,6 @@ async def setexcludedchannel(interaction: discord.Interaction):
             logger.error(f"Error in modal: {error}")
             await interaction.response.send_message("An unexpected error occurred. Please try again.", ephemeral=True)
 
-    # Send the modal
     modal = ChannelIDModal()
     await interaction.response.send_modal(modal)
 
