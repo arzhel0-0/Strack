@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+
+# Runtime-generated files
+message_counts.json
+bot_logs.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+*.sublime-workspace
+*.vscode/
+
+# Sensitive data
+.env
