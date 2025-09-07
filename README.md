@@ -11,7 +11,7 @@ Imagine a bot that not only keeps an eye on who’s chatting the most but also r
 - **Message Tracking**: Counts messages from folks with roles (no bots or your chosen quiet zone included).
 - **Role-Based Leaderboards**: Check out the top talkers for "Agent" or any role you name.
 - **Easy Navigation**: Flip through leaderboards (10 peeps per page) with `⬅️` and `➡️` reactions.
-- **Admin Power**: Reset those counts with `!resetcounts` if you’re an admin.
+- **Admin Power**: Reset those counts with `/resetcounts` if you’re an admin.
 - **Keep a Log**: Tracks when Strack goes online, offline, or resets in `bot_logs.json`.
 
 ## **Getting Strack Running**
@@ -121,27 +121,33 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 
 - **ModuleNotFoundError: dotenv**: Make sure you installed `python-dotenv` with `pip install python-dotenv`.
 
-# **Strack’s Commands**
+## **Strack’s Commands**
 
-Here’s what you can do with Strack—give these a try!
+Here’s what you can do with Strack—give these a try! Use the `/` prefix followed by the command name (e.g., `/leaderboard).
 
-### **!leaderboard**
+### **/leaderboard**
 - **What It Does**: Shows off a leaderboard for the "Agent" role’s top talkers.
-- **How to Use**: `!leaderboard`
+- **How to Use**: `/leaderboard`
 - **Who Can Use**: Anyone!
 - **Fun Stuff**: Pages through 10 folks at a time with `⬅️` and `➡️` to scroll.
 
-### **!rolecount <role_name>**
+### **/rolecount <role_name>**
 - **What It Does**: Pulls up a leaderboard for any role you name.
-- **How to Use**: `!rolecount <role_name>` (e.g., `!rolecount Agent` or `!rolecount "Trusted Member"`)
+- **How to Use**: `/rolecount <role_name>` (e.g., `/rolecount Agent` or `/rolecount "Trusted Member"`)
 - **Who Can Use**: Anyone!
 - **Fun Stuff**: Pages through 10 folks at a time with `⬅️` and `➡️` to scroll.
 
-### **!resetcounts**
+### **/resetcounts**
 - **What It Does**: Wipes the slate clean and resets all message counts.
-- **How to Use**: `!resetcounts`
+- **How to Use**: `/resetcounts`
 - **Who Can Use**: Admins only!
 - **Fun Stuff**: Lets you start fresh with a quick confirmation message.
+
+### **/setexcludedchannel**
+- **What It Does**: Sets or updates the channel ID to exclude from message counting.
+- **How to Use**: `/setexcludedchannel` followed by the channel ID (e.g., `123456789012345678`) or ‘cancel’ to abort.
+- **Who Can Use**: Admins only!
+- **Fun Stuff**: Strack will ask for the ID, update its settings, and ignore that channel moving forward. Enable Developer Mode in Discord to get the ID!
 
 ## **What’s in the Folder**
 - `discord_bot.py`: The heart of Strack—where the magic happens.
