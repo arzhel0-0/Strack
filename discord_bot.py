@@ -6,10 +6,14 @@ import time
 import asyncio
 from datetime import datetime, timezone
 import logging
+from dotenv import load_dotenv
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Bot setup
 intents = discord.Intents.default()
@@ -22,15 +26,15 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 MESSAGE_COUNTS_FILE = 'message_counts.json'
 BOT_LOGS_FILE = 'bot_logs.json'
 
-# Channel ID to exclude from message counting
-EXCLUDED_CHANNEL_ID = 0  # Placeholder for excluded channel ID
+# Channel ID to exclude from message counting (from .env)
+EXCLUDED_CHANNEL_ID = int(os.getenv('EXCLUDED_CHANNEL_ID', 0))  # Default to 0 if not set
 
 # Custom embed border color (hex code)
 EMBED_BORDER_COLOR = 0xFF0000  # Red border color
 
 # Load message counts and metadata from file
 def load_message_counts():
-    default_data = {"counts": {}, "last_reset": 1733639880}  # Set to current time: 12:48 PM IST, September 7, 2025
+    default_data = {"counts": {}, "last_reset": int(time.time())}
     if not os.path.exists(MESSAGE_COUNTS_FILE):
         logger.info(f"{MESSAGE_COUNTS_FILE} does not exist, creating with default structure")
         save_message_counts(default_data)
@@ -49,7 +53,7 @@ def load_message_counts():
                 data["counts"] = {}
             if "last_reset" not in data or not isinstance(data["last_reset"], int):
                 logger.warning(f"Missing or invalid 'last_reset' in {MESSAGE_COUNTS_FILE}, setting to current time")
-                data["last_reset"] = 1733639880
+                data["last_reset"] = int(time.time())
             return data
     except json.JSONDecodeError as e:
         logger.error(f"JSONDecodeError in {MESSAGE_COUNTS_FILE}: {e}. Creating new file.")
@@ -68,11 +72,11 @@ def save_message_counts(data):
         # Ensure data has required structure
         if not isinstance(data, dict):
             logger.error(f"Invalid data type for saving to {MESSAGE_COUNTS_FILE}: {type(data)}")
-            data = {"counts": {}, "last_reset": 1733639880}
+            data = {"counts": {}, "last_reset": int(time.time())}
         if "counts" not in data:
             data["counts"] = {}
         if "last_reset" not in data:
-            data["last_reset"] = 1733639880
+            data["last_reset"] = int(time.time())
 
         # Write to a temporary file first to avoid corruption
         temp_file = MESSAGE_COUNTS_FILE + '.tmp'
@@ -141,7 +145,7 @@ def save_bot_log(event, details):
 # Initialize message counts and metadata
 data = load_message_counts()
 message_counts = data.get("counts", {})
-last_reset = data.get("last_reset", 1733639880)
+last_reset = data.get("last_reset", int(time.time()))
 
 @bot.event
 async def on_ready():
@@ -404,5 +408,5 @@ async def resetcounts_error(ctx, error):
         logger.error(f"Error in resetcounts: {error}")
         await ctx.send("An error occurred. Please try again.")
 
-# Bot token
-bot.run('YOUR_BOT_TOKEN')  # Placeholder for bot token
+# Bot token from .env
+bot.run(os.getenv('BOT_TOKEN'))
