@@ -4,6 +4,7 @@ import json
 import os
 import time
 import asyncio
+import random   # <- added for random replies
 from datetime import datetime, timezone
 import logging
 from dotenv import load_dotenv
@@ -28,6 +29,17 @@ BOT_LOGS_FILE = 'bot_logs.json'
 
 # Channel ID to exclude from message counting (from .env, default to 0 if not set)
 EXCLUDED_CHANNEL_ID = int(os.getenv('EXCLUDED_CHANNEL_ID', 0))
+
+# Random ping responses (when bot is mentioned)
+PING_RESPONSES = [
+    "⚡ Beep boop! I’m awake and ready, what’s up?",
+    "👋 You called? I have risen from my digital nap!",
+    "💡 I’m online, alive, and thriving — what do you need?",
+    "✨ Hey there! The bot has entered the chat.",
+    "📢 Someone pinged me? Don’t worry, I’m wide awake now!",
+    "🎮 Yo, I’ve respawned! Ready for action.",
+    "🤖 Bot here! Running at 100% power."
+]
 
 # Load message counts and metadata from file
 def load_message_counts():
@@ -145,6 +157,19 @@ message_counts = data.get("counts", {})
 message_timestamps = data.get("timestamps", {})
 last_reset = data.get("last_reset", int(time.time()))
 
+# Normalize timestamps: ensure each entry is a list (fix for previous bug)
+for uid, ts in list(message_timestamps.items()):
+    if isinstance(ts, list):
+        continue
+    # If it was saved as a single number earlier, convert to a single-item list
+    try:
+        if ts is None:
+            message_timestamps[uid] = []
+        else:
+            message_timestamps[uid] = [float(ts)]
+    except Exception:
+        message_timestamps[uid] = []
+
 # Sync slash commands on startup for all guilds
 @bot.event
 async def on_ready():
@@ -225,9 +250,19 @@ async def on_message(message):
     if message.author.bot or message.channel.id == EXCLUDED_CHANNEL_ID:
         return
 
+    # Respond when bot is pinged (randomized)
+    if bot.user.mentioned_in(message):
+        try:
+            response = random.choice(PING_RESPONSES)
+            await message.channel.send(response)
+            logger.info(f"Responded to ping from {message.author.name}")
+        except Exception as e:
+            logger.error(f"Error responding to ping: {e}")
+
     try:
         user_id = str(message.author.id)
         message_counts[user_id] = message_counts.get(user_id, 0) + 1
+        # ensure timestamps is a list
         message_timestamps[user_id] = message_timestamps.get(user_id, [])
         message_timestamps[user_id].append(message.created_at.timestamp())
         save_message_counts({
@@ -244,7 +279,18 @@ async def on_message(message):
 # Slash command: /ping
 @bot.tree.command(name="ping", description="Check if the bot is responsive")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! Latency: {round(bot.latency * 1000)}ms", ephemeral=True)
+    fun_messages = [
+        "⚡ Zooming through the wires...",
+        "🚀 Faster than your WiFi!",
+        "🐍 Python power engaged!",
+        "🕒 Beep boop… calculating latency...",
+        "🎯 Right on target!",
+        "💡 Online and ready to roll!",
+        "📡 Signal strong and clear!",
+        "🤖 Just vibin’ and responding!"
+    ]
+    response = f"Pong! Latency: {round(bot.latency * 1000)}ms\n{random.choice(fun_messages)}"
+    await interaction.response.send_message(response, ephemeral=True)
 
 # Slash command: /leaderboard
 @bot.tree.command(name="leaderboard", description="Display the leaderboard for a specific timeframe")
@@ -290,6 +336,7 @@ async def leaderboard(interaction: discord.Interaction, timeframe: str = "all"):
                 count = message_counts.get(user_id, 0)  # Use data since last reset, default to 0 if no messages
             else:
                 time_threshold = current_time - timeframe_options[timeframe]
+                # safe: message_timestamps[user_id] is guaranteed to be a list
                 count = sum(1 for t in message_timestamps.get(user_id, []) if t >= time_threshold) or 0
             username = member.display_name[:15] if len(member.display_name) > 15 else member.display_name
             leaderboard.append((username, count))  # Include all members, even with 0 messages
@@ -530,7 +577,7 @@ async def resetcounts(interaction: discord.Interaction):
 @discord.app_commands.check(lambda ctx: ctx.user.guild_permissions.administrator)
 async def setexcludedchannel(interaction: discord.Interaction):
     await interaction.response.send_message("Please provide the channel ID to exclude (enable Developer Mode in Discord, right-click the channel, and copy its ID). Reply with the ID or 'cancel' to abort.", ephemeral=True)
-    
+
     def check(m):
         return m.author == interaction.user and m.channel == interaction.channel
 
