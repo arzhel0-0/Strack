@@ -128,7 +128,7 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 ## **Strack’s Commands**
 
 ### **/leaderboard**
-- **What It Does**: Shows off a leaderboard for the "Agent" role’s top talkers.
+- **What It Does**: Shows off a leaderboard for the "Agent" role’s top talkers or your server exclusive role.
 - **How to Use**: `/leaderboard`
 - **Who Can Use**: Anyone!
 - **Fun Stuff**: Pages through 10 folks at a time with `⬅️` and `➡️` to scroll.
