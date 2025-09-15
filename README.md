@@ -6,6 +6,8 @@ Hey there! Meet **Strack**, your friendly neighborhood Discord bot that’s here
 ## INVITE STRACK TO YOUR SERVER: 
 https://discord.com/oauth2/authorize?client_id=1377959085973966898&permissions=3407923138260208&integration_type=0&scope=applications.commands+bot
 
+# VOTE FOR THE BOT : https://top.gg/bot/1377959085973966898/vote
+
 ## **Welcome to Strack!**
 
 Imagine a bot that not only keeps an eye on who’s chatting the most but also rolls out cool leaderboards to show off their skills. That’s **Strack** for you! It watches messages in real-time, skips the bot spam and a channel you pick, and lets you see who’s dominating the convo—whether it’s the "Agent" role or any other crew you’ve got. With a snazzy embed design and simple commands, Strack is ready to bring some fun to your server!
