@@ -3,10 +3,10 @@
 
 Hey there! Meet **Strack**, your friendly neighborhood Discord bot that’s here to track message activity and spice up your server with awesome leaderboards! Built with Python and the `discord.py` library, Strack is perfect for communities, gaming crews, or any server where roles matter. It’s all about celebrating your most chatty members in style!
 
-## INVITE STRACK TO YOUR SERVER: 
+# **INVITE STRACK TO YOUR SERVER:**
 https://discord.com/oauth2/authorize?client_id=1377959085973966898&permissions=3407923138260208&integration_type=0&scope=applications.commands+bot
 
-# VOTE FOR THE BOT : https://top.gg/bot/1377959085973966898/vote
+# **VOTE FOR THE BOT:** https://top.gg/bot/1377959085973966898/vote
 
 ## **Welcome to Strack!**
 
