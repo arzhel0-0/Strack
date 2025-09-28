@@ -136,6 +136,11 @@ Don’t have a fancy hosting service? No problem! You can fire up **Strack** rig
 - **Who Can Use**: Anyone!
 - **Fun Stuff**: Pages through 10 folks at a time with `⬅️` and `➡️` to scroll.
 
+### **/mystats**
+- **What It Does**: Shows in server stats with specified details.
+- **How to Use**: `/mystats`
+- **Who Can Use**: Anyone!
+
 ### **/rolecount <role_name>**
 - **What It Does**: Pulls up a leaderboard for any role you name.
 - **How to Use**: `/rolecount <role_name>` (e.g., `/rolecount Agent` or `/rolecount "Trusted Member"`)
